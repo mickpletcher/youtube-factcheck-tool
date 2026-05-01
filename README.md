@@ -11,7 +11,6 @@ The repo now contains two working implementations:
 
 1. [CHANGELOG.md](CHANGELOG.md)
 2. [PROJECT_SCAN.md](PROJECT_SCAN.md)
-3. [futureiupgrades.md](futureiupgrades.md)
 
 ## Current Project Layout
 
@@ -25,7 +24,6 @@ requirements.txt
 README.md
 CHANGELOG.md
 PROJECT_SCAN.md
-futureiupgrades.md
 ```
 
 ## What The Tool Does
