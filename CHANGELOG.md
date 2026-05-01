@@ -14,7 +14,7 @@
 1. Updated `README.md` to reflect the new repo layout.
 2. Updated the run and test commands in `README.md` for the `python_app` and `python_tests` structure.
 3. Updated `PROJECT_SCAN.md` so it reflects the current package layout and run commands.
-4. Added `futureiupgrades.md` with tiered upgrade ideas for immediate, medium term, and longer term work.
+4. Added `future-upgrades.md` with tiered upgrade ideas for immediate, medium term, and longer term work.
 5. Expanded `README.md` into a detailed usage guide for Python and PowerShell.
 6. Replaced `.env.example` with a repo specific version that matches the current Python and PowerShell settings.
 7. Replaced the root `.gitignore` with repo specific ignore rules for `.env`, Python caches, local artifacts, and editor noise.
@@ -24,6 +24,11 @@
 
 1. Added structured stage logging to the Python fact check route for metadata, transcript fetch, claim extraction, research, verdict scoring, and report generation.
 2. Added structured stage logging to the native PowerShell pipeline for metadata, transcript fetch, claim extraction, research, verdict scoring, and report generation.
+
+### Runtime validation
+
+1. Added Python startup validation for required external tools so the API now fails early when `yt-dlp` or `ffmpeg` is missing from `PATH`.
+2. Added native PowerShell startup validation for required external tools so the pipeline now fails early when `yt-dlp` or `ffmpeg` is missing from `PATH`.
 
 ### Spec workflow
 
@@ -37,7 +42,7 @@
 
 1. Installed the Python dependencies from `requirements.txt`.
 2. Ran the Python test suite with `py -3.11 -m pytest python_tests -q`.
-3. Confirmed the current result is `67 passed`.
+3. Confirmed the current result is `69 passed`.
 4. Ran `Invoke-Pester .\powershell_tests\YouTubeFactCheck.Tests.ps1`.
-5. Confirmed the current PowerShell test result is `6 passed`.
+5. Confirmed the current PowerShell test result is `7 passed`.
 6. Ran `.\powershell_app\Invoke-YouTubeFactCheck.ps1` against a live YouTube URL and confirmed the command returns a valid report object.

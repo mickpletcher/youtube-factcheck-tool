@@ -1,8 +1,14 @@
 """Tests for the transcript service."""
 
 import pytest
+from unittest.mock import patch
 
-from python_app.services.transcript_service import _extract_video_id, get_transcript, get_video_metadata
+from python_app.services.transcript_service import (
+    _extract_video_id,
+    get_transcript,
+    get_video_metadata,
+    validate_runtime_dependencies,
+)
 from python_app.models.schemas import TranscriptSource, VideoMetadata
 
 
@@ -127,3 +133,19 @@ class TestGetTranscript:
         result = get_transcript("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
         assert result.source == TranscriptSource.unavailable
         assert result.text == ""
+
+
+class TestValidateRuntimeDependencies:
+    def test_passes_when_required_tools_exist(self):
+        with patch("python_app.services.transcript_service.shutil.which", return_value="C:\\tools\\bin"):
+            validate_runtime_dependencies()
+
+    def test_raises_when_required_tool_is_missing(self):
+        def fake_which(tool_name):
+            if tool_name == "yt-dlp":
+                return "C:\\tools\\yt-dlp.exe"
+            return None
+
+        with patch("python_app.services.transcript_service.shutil.which", side_effect=fake_which):
+            with pytest.raises(RuntimeError, match="ffmpeg"):
+                validate_runtime_dependencies()

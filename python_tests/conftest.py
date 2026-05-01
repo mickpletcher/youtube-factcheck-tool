@@ -17,7 +17,8 @@ from python_app.models.schemas import (
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(mocker) -> TestClient:
+    mocker.patch("python_app.main.transcript_service.validate_runtime_dependencies")
     return TestClient(app)
 
 

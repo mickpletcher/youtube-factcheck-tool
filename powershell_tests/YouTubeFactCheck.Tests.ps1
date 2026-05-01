@@ -14,6 +14,11 @@ Describe 'YouTubeFactCheck module' {
             Test-YftYouTubeUrl -Url 'https://vimeo.com/123' | Should -BeFalse
         }
 
+        It 'fails when required external tools are missing' {
+            Mock Get-Command { $null } -ParameterFilter { $Name -in @('yt-dlp', 'ffmpeg') }
+            { Assert-YftRequiredTools } | Should -Throw '*yt-dlp*ffmpeg*'
+        }
+
         It 'creates heuristic claims from factual text' {
             $settings = [pscustomobject]@{
                 OpenAIApiKey       = ''
@@ -73,6 +78,7 @@ Describe 'YouTubeFactCheck module' {
                 }
             }
 
+            Mock Assert-YftRequiredTools {}
             Mock Get-YftVideoMetadata {
                 [pscustomobject]@{
                     video_id         = 'dQw4w9WgXcQ'

@@ -11,7 +11,7 @@ The repo contains two implementations:
 
 1. [CHANGELOG.md](CHANGELOG.md)
 2. [PROJECT_SCAN.md](PROJECT_SCAN.md)
-3. [futureiupgrades.md](futureiupgrades.md)
+3. [future-upgrades.md](future-upgrades.md)
 4. [docs/repo-audit.md](docs/repo-audit.md)
 5. [specs/001-dual-stack-factcheck-foundation/spec.md](specs/001-dual-stack-factcheck-foundation/spec.md)
 
@@ -28,7 +28,7 @@ requirements.txt
 README.md
 CHANGELOG.md
 PROJECT_SCAN.md
-futureiupgrades.md
+future-upgrades.md
 docs/
 specs/
 ```
@@ -80,6 +80,8 @@ Reusable Copilot prompts live in `.github/prompts/`.
 2. `ffmpeg`
 
 The Python API can also use `yt-dlp` and Whisper on the fallback transcript path.
+
+Both runtime entry points now validate `yt-dlp` and `ffmpeg` at startup and fail early if either tool is missing from `PATH`.
 
 ### OpenAI
 
@@ -220,6 +222,8 @@ Copy-Item .env.example .env
 py -3.11 -m uvicorn python_app.main:app --reload
 ```
 
+The API now validates `yt-dlp` and `ffmpeg` during startup. If either tool is missing, the server exits with a clear error.
+
 Available endpoints:
 
 1. `http://localhost:8000/health`
@@ -339,9 +343,13 @@ with open("factcheck-report.md", "w", encoding="utf-8") as handle:
 
 Install `yt-dlp` and make sure it is in `PATH`.
 
+The Python API and the native PowerShell path now fail at startup if it is missing.
+
 ### `ffmpeg` is missing
 
 Install `ffmpeg` and make sure it is in `PATH`.
+
+The Python API and the native PowerShell path now fail at startup if it is missing.
 
 ### PowerShell returns no claims
 

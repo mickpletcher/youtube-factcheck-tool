@@ -63,6 +63,21 @@ function Get-YftRepoRoot {
     return $root.Path
 }
 
+function Assert-YftRequiredTools {
+    $missingTools = New-Object System.Collections.Generic.List[string]
+    foreach ($toolName in @('yt-dlp', 'ffmpeg')) {
+        $command = Get-Command -Name $toolName -ErrorAction SilentlyContinue
+        if (-not $command) {
+            [void]$missingTools.Add($toolName)
+        }
+    }
+
+    if ($missingTools.Count -gt 0) {
+        $missingDisplay = ($missingTools -join ', ')
+        throw "Missing required external tools: $missingDisplay. Install them and make sure they are available in PATH."
+    }
+}
+
 function Get-YftSettings {
     $repoRoot = Get-YftRepoRoot
     $envPath = Join-Path $repoRoot '.env'
@@ -933,6 +948,7 @@ function Invoke-YftFactCheck {
         throw 'URL must be a YouTube link (youtube.com or youtu.be).'
     }
 
+    Assert-YftRequiredTools
     $settings = Get-YftSettings
     $video = Get-YftVideoMetadata -Url $Url
     Write-YftLog -Stage 'metadata' -Status 'complete' -Fields @{
@@ -953,6 +969,7 @@ function Invoke-YftFactCheck {
 }
 
 Export-ModuleMember -Function @(
+    'Assert-YftRequiredTools',
     'Get-YftSettings',
     'Test-YftYouTubeUrl',
     'Get-YftVideoId',

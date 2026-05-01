@@ -9,11 +9,25 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import tempfile
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 from python_app.models.schemas import TranscriptResult, TranscriptSource, VideoMetadata
+
+
+def validate_runtime_dependencies() -> None:
+    """Validate required external tools for the full transcript pipeline."""
+    missing_tools = [
+        tool_name for tool_name in ("yt-dlp", "ffmpeg") if shutil.which(tool_name) is None
+    ]
+    if missing_tools:
+        missing_display = ", ".join(missing_tools)
+        raise RuntimeError(
+            f"Missing required external tools: {missing_display}. "
+            "Install them and make sure they are available in PATH."
+        )
 
 
 def _extract_video_id(url: str) -> str:
