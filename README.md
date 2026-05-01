@@ -2,14 +2,10 @@
 
 This project accepts a YouTube URL, extracts video metadata, pulls a transcript, finds factual claims, researches those claims, scores their credibility, and returns a final report in JSON and Markdown.
 
-The current working implementation is in Python.
+The repo now contains two working implementations:
 
-You can use it in two practical ways today:
-
-1. Run the Python API from PowerShell
-2. Run the Python API and call it from Python
-
-The `powershell_app` and `powershell_tests` folders are reserved for a future native PowerShell implementation. They are not the active application yet.
+1. A Python API in `python_app`
+2. A native PowerShell pipeline in `powershell_app`
 
 ## Project Docs
 
@@ -85,9 +81,9 @@ Then update `.env` with the values you want.
 | `RESEARCH_MAX_RESULTS` | No | `5` | Search results collected for each claim |
 | `WHISPER_MODEL` | No | `base` | Whisper model used for audio transcription fallback |
 
-## Tutorial 1: Run The Tool From PowerShell
+## Tutorial 1: Run The Native PowerShell Tool
 
-This is the easiest path on Windows.
+This path runs the PowerShell implementation directly.
 
 ### Step 1: Open PowerShell In The Repo
 
@@ -97,32 +93,21 @@ Open PowerShell and change into the repo folder.
 Set-Location "C:\Users\mick0\OneDrive\Documents\Code & Dev\GitHub\youtube-factcheck-tool"
 ```
 
-### Step 2: Create A Virtual Environment
+### Step 2: Install External Tools
+
+The PowerShell implementation expects these tools to be available in `PATH`:
+
+1. `yt-dlp`
+2. `ffmpeg`
+
+You can verify them with:
 
 ```powershell
-py -3.11 -m venv .venv
+Get-Command yt-dlp
+Get-Command ffmpeg
 ```
 
-### Step 3: Activate The Virtual Environment
-
-```powershell
-.\.venv\Scripts\Activate.ps1
-```
-
-If PowerShell blocks script execution, run this in the current session:
-
-```powershell
-Set-ExecutionPolicy -Scope Process Bypass
-.\.venv\Scripts\Activate.ps1
-```
-
-### Step 4: Install Dependencies
-
-```powershell
-python -m pip install -r requirements.txt
-```
-
-### Step 5: Create The Environment File
+### Step 3: Create The Environment File
 
 ```powershell
 Copy-Item .env.example .env
@@ -140,7 +125,68 @@ RESEARCH_MAX_RESULTS=5
 WHISPER_MODEL=base
 ```
 
-### Step 6: Start The API
+### Step 4: Run The PowerShell Fact Check Command
+
+```powershell
+.\powershell_app\Invoke-YouTubeFactCheck.ps1 `
+    -Url "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+```
+
+This returns JSON to the console.
+
+### Step 5: Save The PowerShell Result To Files
+
+```powershell
+.\powershell_app\Invoke-YouTubeFactCheck.ps1 `
+    -Url "https://www.youtube.com/watch?v=dQw4w9WgXcQ" `
+    -JsonOutputPath ".\factcheck-result.json" `
+    -MarkdownOutputPath ".\factcheck-report.md"
+```
+
+This gives you:
+
+1. `factcheck-result.json`
+2. `factcheck-report.md`
+
+This gives you:
+
+1. `factcheck-result.json`
+2. `factcheck-report.md`
+
+### Step 6: Run The PowerShell Tests
+
+```powershell
+Invoke-Pester .\powershell_tests\YouTubeFactCheck.Tests.ps1
+```
+
+### Step 7: How The PowerShell Flow Works
+
+The PowerShell implementation does this:
+
+1. Gets video metadata with `yt-dlp`
+2. Tries to download English subtitles with `yt-dlp`
+3. Falls back to OpenAI audio transcription if captions are not available and `OPENAI_API_KEY` is set
+4. Extracts claims with OpenAI or a heuristic fallback
+5. Searches DuckDuckGo for evidence
+6. Scores claims with OpenAI or a heuristic fallback
+7. Builds the same report shape used by the Python side
+
+## Tutorial 2: Run The Python API From PowerShell
+
+This path uses the FastAPI implementation.
+
+This path is useful if you want to script calls, build automation, or integrate the API into another Python project.
+
+### Step 1: Set Up The Python Environment
+
+```powershell
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
+
+### Step 2: Start The Python API
 
 ```powershell
 python -m uvicorn python_app.main:app --reload
@@ -153,21 +199,13 @@ When the server starts, use:
 3. OpenAPI JSON: `http://localhost:8000/openapi.json`
 4. Health check: `http://localhost:8000/health`
 
-### Step 7: Test The Health Endpoint From PowerShell
+### Step 3: Test The Health Endpoint
 
 ```powershell
 Invoke-RestMethod -Method Get -Uri "http://localhost:8000/health"
 ```
 
-Expected result:
-
-```json
-{
-  "status": "ok"
-}
-```
-
-### Step 8: Submit A YouTube URL From PowerShell
+### Step 4: Submit A YouTube URL From PowerShell
 
 ```powershell
 $body = @{
@@ -181,7 +219,7 @@ Invoke-RestMethod `
     -Body $body
 ```
 
-### Step 9: Save The Result To Files From PowerShell
+### Step 5: Save The Python API Result To Files
 
 ```powershell
 $body = @{
@@ -198,33 +236,17 @@ $result | ConvertTo-Json -Depth 10 | Set-Content .\factcheck-result.json
 $result.report_markdown | Set-Content .\factcheck-report.md
 ```
 
-This gives you:
-
-1. `factcheck-result.json`
-2. `factcheck-report.md`
-
-### Step 10: Run The Python Tests From PowerShell
+### Step 6: Run The Python Tests
 
 ```powershell
 py -3.11 -m pytest python_tests -v
 ```
 
-## Tutorial 2: Use The Tool From Python
+## Tutorial 3: Use The Python API From Python
 
 This path is useful if you want to script calls, build automation, or integrate the API into another Python project.
 
-### Step 1: Set Up The Environment
-
-You can use the same setup as the PowerShell tutorial:
-
-```powershell
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-Copy-Item .env.example .env
-```
-
-Then start the API:
+### Step 1: Start The Python API
 
 ```powershell
 python -m uvicorn python_app.main:app --reload
@@ -314,20 +336,18 @@ The API returns a report object with these main fields:
 
 ### Python
 
-The active application is the Python package in `python_app`.
+The FastAPI implementation lives in `python_app`.
 
 ### PowerShell
 
-There is not yet a native PowerShell implementation of the fact check pipeline.
+The native PowerShell implementation lives in `powershell_app`.
 
-Right now, PowerShell support means:
+It uses:
 
-1. You can install dependencies from PowerShell
-2. You can run the Python API from PowerShell
-3. You can call the API from PowerShell
-4. You can save reports from PowerShell
-
-The future native PowerShell implementation will live under `powershell_app`.
+1. `yt-dlp` for metadata and subtitles
+2. DuckDuckGo HTML results for research
+3. OpenAI REST calls for claim extraction and verdict scoring when `OPENAI_API_KEY` is set
+4. OpenAI audio transcription for subtitle fallback when captions are missing
 
 ## Troubleshooting
 
@@ -343,6 +363,14 @@ Set-ExecutionPolicy -Scope Process Bypass
 ### `ffmpeg` Is Missing
 
 If a video has no captions and audio transcription fails, make sure `ffmpeg` is installed and available in `PATH`.
+
+### The PowerShell Tool Returns No Claims
+
+This usually means one of these:
+
+1. The transcript did not contain clear factual statements
+2. `OPENAI_API_KEY` is not set, so heuristic claim extraction was used
+3. The selected video is not a good fact check sample
 
 ### The API Starts But Results Look Weak
 
