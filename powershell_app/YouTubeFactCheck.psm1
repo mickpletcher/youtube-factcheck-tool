@@ -37,6 +37,27 @@ verdict, confidence, explanation, sources
 Allowed verdict values are Supported, Contradicted, Disputed, and Unverified.
 '@
 
+function Write-YftLog {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Stage,
+        [Parameter(Mandatory)]
+        [string]$Status,
+        [hashtable]$Fields = @{}
+    )
+
+    $payload = [ordered]@{
+        stage  = $Stage
+        status = $Status
+    }
+
+    foreach ($key in $Fields.Keys) {
+        $payload[$key] = $Fields[$key]
+    }
+
+    Write-Information ($payload | ConvertTo-Json -Compress -Depth 10) -InformationAction Continue
+}
+
 function Get-YftRepoRoot {
     $root = Resolve-Path (Join-Path $PSScriptRoot '..')
     return $root.Path
@@ -347,12 +368,28 @@ function Get-YftTranscript {
 
     $captionResult = Get-YftYouTubeCaptions -Url $Url
     if ($captionResult) {
+        Write-YftLog -Stage 'transcript_fetch' -Status 'complete' -Fields @{
+            transcript_source = $captionResult.source
+            transcript_length = $captionResult.text.Length
+            language          = $captionResult.language
+        }
         return $captionResult
     }
 
     $audioResult = Get-YftAudioTranscript -Url $Url -Settings $Settings
     if ($audioResult) {
+        Write-YftLog -Stage 'transcript_fetch' -Status 'complete' -Fields @{
+            transcript_source = $audioResult.source
+            transcript_length = $audioResult.text.Length
+            language          = $audioResult.language
+        }
         return $audioResult
+    }
+
+    Write-YftLog -Stage 'transcript_fetch' -Status 'complete' -Fields @{
+        transcript_source = 'unavailable'
+        transcript_length = 0
+        language          = $null
     }
 
     return [pscustomobject]@{
@@ -468,6 +505,10 @@ function Get-YftClaims {
     )
 
     if (-not $TranscriptText.Trim()) {
+        Write-YftLog -Stage 'claim_extraction' -Status 'complete' -Fields @{
+            claim_count = 0
+            provider    = 'none'
+        }
         return @()
     }
 
@@ -496,6 +537,10 @@ function Get-YftClaims {
                     }
                 }
                 if ($claims.Count -gt 0) {
+                    Write-YftLog -Stage 'claim_extraction' -Status 'complete' -Fields @{
+                        claim_count = $claims.Count
+                        provider    = 'openai'
+                    }
                     return $claims.ToArray()
                 }
             }
@@ -504,7 +549,12 @@ function Get-YftClaims {
         }
     }
 
-    return @(Get-YftHeuristicClaims -TranscriptText $TranscriptText -MaxClaims $Settings.MaxClaims)
+    $heuristicClaims = @(Get-YftHeuristicClaims -TranscriptText $TranscriptText -MaxClaims $Settings.MaxClaims)
+    Write-YftLog -Stage 'claim_extraction' -Status 'complete' -Fields @{
+        claim_count = $heuristicClaims.Count
+        provider    = 'heuristic'
+    }
+    return $heuristicClaims
 }
 
 function Test-YftTrustedUrl {
@@ -580,6 +630,15 @@ function Get-YftResearchResults {
             claim_text     = $claim.text
             search_results = $searchResults
         })
+    }
+
+    $searchResultCount = 0
+    foreach ($result in $results) {
+        $searchResultCount += @($result.search_results).Count
+    }
+    Write-YftLog -Stage 'research' -Status 'complete' -Fields @{
+        claim_count         = $results.Count
+        search_result_count = $searchResultCount
     }
 
     return $results.ToArray()
@@ -691,6 +750,12 @@ function Get-YftScoredClaims {
         }
 
         $scored.Add((Get-YftHeuristicVerdict -ResearchResult $result))
+    }
+
+    $provider = if ($Settings.OpenAIApiKey) { 'mixed_or_openai' } else { 'heuristic' }
+    Write-YftLog -Stage 'verdict_scoring' -Status 'complete' -Fields @{
+        scored_claim_count = $scored.Count
+        provider           = $provider
     }
 
     return $scored.ToArray()
@@ -870,11 +935,21 @@ function Invoke-YftFactCheck {
 
     $settings = Get-YftSettings
     $video = Get-YftVideoMetadata -Url $Url
+    Write-YftLog -Stage 'metadata' -Status 'complete' -Fields @{
+        video_id = $video.video_id
+        title    = $video.title
+        channel  = $video.channel
+    }
     $transcript = Get-YftTranscript -Url $Url -Settings $settings
     $claims = @(Get-YftClaims -TranscriptText $transcript.text -Settings $settings)
     $research = @(Get-YftResearchResults -Claims $claims -Settings $settings)
     $scored = @(Get-YftScoredClaims -ResearchResults $research -Settings $settings)
-    return New-YftReport -Video $video -Transcript $transcript -ScoredClaims $scored
+    $report = New-YftReport -Video $video -Transcript $transcript -ScoredClaims $scored
+    Write-YftLog -Stage 'report_generation' -Status 'complete' -Fields @{
+        overall_credibility_score = $report.overall_credibility_score
+        claim_count               = @($report.claims).Count
+    }
+    return $report
 }
 
 Export-ModuleMember -Function @(
