@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services.transcript_service import _extract_video_id, get_transcript, get_video_metadata
-from app.models.schemas import TranscriptSource, VideoMetadata
+from python_app.services.transcript_service import _extract_video_id, get_transcript, get_video_metadata
+from python_app.models.schemas import TranscriptSource, VideoMetadata
 
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ class TestGetVideoMetadata:
     def test_fallback_returns_video_metadata_on_error(self, mocker):
         """When yt-dlp raises an exception the service returns a stub."""
         mocker.patch(
-            "app.services.transcript_service._fetch_metadata_yt_dlp",
+            "python_app.services.transcript_service._fetch_metadata_yt_dlp",
             side_effect=Exception("network error"),
         )
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
@@ -66,7 +66,7 @@ class TestGetVideoMetadata:
             url="https://www.youtube.com/watch?v=dQw4w9WgXcQ",
         )
         mocker.patch(
-            "app.services.transcript_service._fetch_metadata_yt_dlp",
+            "python_app.services.transcript_service._fetch_metadata_yt_dlp",
             return_value=expected,
         )
         result = get_video_metadata("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -81,7 +81,7 @@ class TestGetVideoMetadata:
 
 class TestGetTranscript:
     def test_returns_youtube_captions_when_available(self, mocker):
-        from app.models.schemas import TranscriptResult
+        from python_app.models.schemas import TranscriptResult
 
         caption = TranscriptResult(
             text="Hello world.",
@@ -89,7 +89,7 @@ class TestGetTranscript:
             language="en",
         )
         mocker.patch(
-            "app.services.transcript_service._fetch_youtube_captions",
+            "python_app.services.transcript_service._fetch_youtube_captions",
             return_value=caption,
         )
         result = get_transcript("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -97,7 +97,7 @@ class TestGetTranscript:
         assert result.text == "Hello world."
 
     def test_falls_back_to_audio_transcription(self, mocker):
-        from app.models.schemas import TranscriptResult
+        from python_app.models.schemas import TranscriptResult
 
         audio = TranscriptResult(
             text="Audio transcript.",
@@ -105,11 +105,11 @@ class TestGetTranscript:
             language="en",
         )
         mocker.patch(
-            "app.services.transcript_service._fetch_youtube_captions",
+            "python_app.services.transcript_service._fetch_youtube_captions",
             return_value=None,
         )
         mocker.patch(
-            "app.services.transcript_service._transcribe_audio",
+            "python_app.services.transcript_service._transcribe_audio",
             return_value=audio,
         )
         result = get_transcript("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
@@ -117,11 +117,11 @@ class TestGetTranscript:
 
     def test_returns_unavailable_when_both_fail(self, mocker):
         mocker.patch(
-            "app.services.transcript_service._fetch_youtube_captions",
+            "python_app.services.transcript_service._fetch_youtube_captions",
             return_value=None,
         )
         mocker.patch(
-            "app.services.transcript_service._transcribe_audio",
+            "python_app.services.transcript_service._transcribe_audio",
             return_value=None,
         )
         result = get_transcript("https://www.youtube.com/watch?v=dQw4w9WgXcQ")

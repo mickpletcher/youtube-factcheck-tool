@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services.claim_extractor import _extract_claims_heuristic, extract_claims
-from app.models.schemas import Claim
+from python_app.services.claim_extractor import _extract_claims_heuristic, extract_claims
+from python_app.models.schemas import Claim
 
 
 class TestExtractClaimsHeuristic:
@@ -65,7 +65,7 @@ class TestExtractClaims:
 
     def test_falls_back_to_heuristic_on_llm_error(self, mocker):
         mocker.patch(
-            "app.services.claim_extractor._extract_claims_llm",
+            "python_app.services.claim_extractor._extract_claims_llm",
             side_effect=Exception("API error"),
         )
         text = (
@@ -78,7 +78,7 @@ class TestExtractClaims:
     def test_llm_path_used_when_api_key_present(self, mocker):
         expected = [Claim(id="claim_1", text="Earth is round.")]
         mock_llm = mocker.patch(
-            "app.services.claim_extractor._extract_claims_llm",
+            "python_app.services.claim_extractor._extract_claims_llm",
             return_value=expected,
         )
         result = extract_claims("Some text.", openai_api_key="sk-fake-key")

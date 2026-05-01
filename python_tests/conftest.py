@@ -3,8 +3,8 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app
-from app.models.schemas import (
+from python_app.main import app
+from python_app.models.schemas import (
     Claim,
     ResearchResult,
     ScoredClaim,

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import List
 
-from app.models.schemas import Claim, ResearchResult, SearchResult
+from python_app.models.schemas import Claim, ResearchResult, SearchResult
 
 # Trusted source domains – results from these domains are prioritised
 TRUSTED_DOMAINS = frozenset(

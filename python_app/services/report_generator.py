@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import List
 
-from app.models.schemas import (
+from python_app.models.schemas import (
     FactCheckReport,
     ScoredClaim,
     TranscriptSource,

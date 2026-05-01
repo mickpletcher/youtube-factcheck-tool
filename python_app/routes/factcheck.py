@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException
 
-from app.config import settings
-from app.models.schemas import FactCheckReport, FactCheckRequest
-from app.services import (
+from python_app.config import settings
+from python_app.models.schemas import FactCheckReport, FactCheckRequest
+from python_app.services import (
     claim_extractor,
     report_generator,
     research_service,

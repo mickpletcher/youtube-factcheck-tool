@@ -11,7 +11,7 @@ import json
 import re
 from typing import List
 
-from app.models.schemas import ResearchResult, ScoredClaim, VerdictLabel
+from python_app.models.schemas import ResearchResult, ScoredClaim, VerdictLabel
 
 # ---------------------------------------------------------------------------
 # LLM-based scoring

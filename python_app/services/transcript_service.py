@@ -13,7 +13,7 @@ import tempfile
 from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
-from app.models.schemas import TranscriptResult, TranscriptSource, VideoMetadata
+from python_app.models.schemas import TranscriptResult, TranscriptSource, VideoMetadata
 
 
 def _extract_video_id(url: str) -> str:

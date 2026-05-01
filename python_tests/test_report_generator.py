@@ -2,13 +2,13 @@
 
 import pytest
 
-from app.services.report_generator import (
+from python_app.services.report_generator import (
     _compute_overall_score,
     _build_summary,
     _generate_markdown,
     generate_report,
 )
-from app.models.schemas import (
+from python_app.models.schemas import (
     FactCheckReport,
     ScoredClaim,
     TranscriptSource,

@@ -2,12 +2,12 @@
 
 import pytest
 
-from app.services.verdict_service import (
+from python_app.services.verdict_service import (
     _score_claim_heuristic,
     score_claim,
     score_claims,
 )
-from app.models.schemas import (
+from python_app.models.schemas import (
     ResearchResult,
     ScoredClaim,
     SearchResult,
@@ -101,7 +101,7 @@ class TestScoreClaim:
 
     def test_falls_back_to_heuristic_on_llm_failure(self, mocker):
         mocker.patch(
-            "app.services.verdict_service._score_claim_llm",
+            "python_app.services.verdict_service._score_claim_llm",
             side_effect=Exception("API error"),
         )
         research = _make_research("claim_1", "Earth is round.", ["confirmed."])
@@ -118,7 +118,7 @@ class TestScoreClaim:
             sources=[],
         )
         mock_llm = mocker.patch(
-            "app.services.verdict_service._score_claim_llm",
+            "python_app.services.verdict_service._score_claim_llm",
             return_value=expected,
         )
         research = _make_research("claim_1", "Earth is round.", [])
@@ -130,7 +130,7 @@ class TestScoreClaim:
 class TestScoreClaims:
     def test_processes_all_research_results(self, mocker):
         mocker.patch(
-            "app.services.verdict_service._score_claim_heuristic",
+            "python_app.services.verdict_service._score_claim_heuristic",
             return_value=ScoredClaim(
                 id="x",
                 text="x",

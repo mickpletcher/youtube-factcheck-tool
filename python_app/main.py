@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI
 
-from app.routes.factcheck import router as factcheck_router
+from python_app.routes.factcheck import router as factcheck_router
 
 app = FastAPI(
     title="YouTube Fact-Check Tool",

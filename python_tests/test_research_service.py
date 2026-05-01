@@ -2,8 +2,8 @@
 
 import pytest
 
-from app.services.research_service import _is_trusted, research_claim, research_claims
-from app.models.schemas import Claim, ResearchResult, SearchResult
+from python_app.services.research_service import _is_trusted, research_claim, research_claims
+from python_app.models.schemas import Claim, ResearchResult, SearchResult
 
 
 class TestIsTrusted:
@@ -29,7 +29,7 @@ class TestResearchClaim:
             )
         ]
         mocker.patch(
-            "app.services.research_service._search_duckduckgo",
+            "python_app.services.research_service._search_duckduckgo",
             return_value=mock_results,
         )
         claim = Claim(id="claim_1", text="The Earth is 4.5 billion years old.")
@@ -42,7 +42,7 @@ class TestResearchClaim:
 
     def test_empty_search_results_handled(self, mocker):
         mocker.patch(
-            "app.services.research_service._search_duckduckgo",
+            "python_app.services.research_service._search_duckduckgo",
             return_value=[],
         )
         claim = Claim(id="claim_1", text="Obscure claim with no results.")
@@ -52,7 +52,7 @@ class TestResearchClaim:
     def test_ddgs_import_error_returns_empty(self, mocker):
         """If duckduckgo_search is not installed, return an empty list gracefully."""
         mocker.patch(
-            "app.services.research_service._search_duckduckgo",
+            "python_app.services.research_service._search_duckduckgo",
             return_value=[],
         )
         claim = Claim(id="claim_1", text="Some claim.")
@@ -63,7 +63,7 @@ class TestResearchClaim:
 class TestResearchClaims:
     def test_processes_all_claims(self, mocker):
         mocker.patch(
-            "app.services.research_service._search_duckduckgo",
+            "python_app.services.research_service._search_duckduckgo",
             return_value=[],
         )
         claims = [

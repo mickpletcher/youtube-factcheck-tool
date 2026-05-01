@@ -3,7 +3,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from app.models.schemas import (
+from python_app.models.schemas import (
     ScoredClaim,
     TranscriptResult,
     TranscriptSource,
@@ -27,11 +27,11 @@ class TestFactCheckEndpoint:
     def test_returns_full_report(self, client, mocker, sample_video_metadata, sample_scored_claims):
         """Full pipeline mock – ensures the route correctly wires all services."""
         mocker.patch(
-            "app.routes.factcheck.transcript_service.get_video_metadata",
+            "python_app.routes.factcheck.transcript_service.get_video_metadata",
             return_value=sample_video_metadata,
         )
         mocker.patch(
-            "app.routes.factcheck.transcript_service.get_transcript",
+            "python_app.routes.factcheck.transcript_service.get_transcript",
             return_value=TranscriptResult(
                 text="Scientists discovered Earth is 4.5 billion years old.",
                 source=TranscriptSource.youtube_captions,
@@ -39,15 +39,15 @@ class TestFactCheckEndpoint:
             ),
         )
         mocker.patch(
-            "app.routes.factcheck.claim_extractor.extract_claims",
+            "python_app.routes.factcheck.claim_extractor.extract_claims",
             return_value=[],
         )
         mocker.patch(
-            "app.routes.factcheck.research_service.research_claims",
+            "python_app.routes.factcheck.research_service.research_claims",
             return_value=[],
         )
         mocker.patch(
-            "app.routes.factcheck.verdict_service.score_claims",
+            "python_app.routes.factcheck.verdict_service.score_claims",
             return_value=sample_scored_claims,
         )
 
@@ -66,7 +66,7 @@ class TestFactCheckEndpoint:
 
     def test_returns_502_on_metadata_error(self, client, mocker):
         mocker.patch(
-            "app.routes.factcheck.transcript_service.get_video_metadata",
+            "python_app.routes.factcheck.transcript_service.get_video_metadata",
             side_effect=RuntimeError("Network unreachable"),
         )
         response = client.post(
@@ -77,26 +77,26 @@ class TestFactCheckEndpoint:
 
     def test_report_markdown_in_response(self, client, mocker, sample_video_metadata):
         mocker.patch(
-            "app.routes.factcheck.transcript_service.get_video_metadata",
+            "python_app.routes.factcheck.transcript_service.get_video_metadata",
             return_value=sample_video_metadata,
         )
         mocker.patch(
-            "app.routes.factcheck.transcript_service.get_transcript",
+            "python_app.routes.factcheck.transcript_service.get_transcript",
             return_value=TranscriptResult(
                 text="",
                 source=TranscriptSource.unavailable,
             ),
         )
         mocker.patch(
-            "app.routes.factcheck.claim_extractor.extract_claims",
+            "python_app.routes.factcheck.claim_extractor.extract_claims",
             return_value=[],
         )
         mocker.patch(
-            "app.routes.factcheck.research_service.research_claims",
+            "python_app.routes.factcheck.research_service.research_claims",
             return_value=[],
         )
         mocker.patch(
-            "app.routes.factcheck.verdict_service.score_claims",
+            "python_app.routes.factcheck.verdict_service.score_claims",
             return_value=[],
         )
 

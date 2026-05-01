@@ -16,7 +16,7 @@ A FastAPI Python application that accepts a YouTube URL and produces a structure
 
 ```
 youtube-factcheck-tool/
-├── app/
+├── python_app/
 │   ├── __init__.py
 │   ├── config.py                  # Pydantic-settings config (env vars / .env file)
 │   ├── main.py                    # FastAPI app factory + health endpoint
@@ -33,7 +33,7 @@ youtube-factcheck-tool/
 │       ├── research_service.py    # DuckDuckGo web search
 │       ├── verdict_service.py     # LLM / heuristic verdict scoring
 │       └── report_generator.py   # Credibility score + Markdown render
-├── tests/
+├── python_tests/
 │   ├── __init__.py
 │   ├── conftest.py                # Shared fixtures
 │   ├── test_claim_extractor.py
@@ -79,7 +79,7 @@ youtube-factcheck-tool/
 
 ---
 
-## Configuration (`app/config.py`)
+## Configuration (`python_app/config.py`)
 
 Loaded via `pydantic-settings`. Reads from `.env` file or environment.
 
@@ -95,7 +95,7 @@ When `OPENAI_API_KEY` is empty, both the claim extractor and verdict scorer sile
 
 ---
 
-## Data Models (`app/models/schemas.py`)
+## Data Models (`python_app/models/schemas.py`)
 
 ```
 FactCheckRequest
@@ -330,11 +330,15 @@ pip install -r requirements.txt
 cp .env.example .env   # .env.example does not currently exist — create manually
 
 # Start server
-uvicorn app.main:app --reload
+python -m uvicorn python_app.main:app --reload
 
 # Run tests
-pytest
+python -m pytest python_tests -v
 ```
 
 Server: `http://localhost:8000`  
 Docs: `http://localhost:8000/docs`
+├── powershell_app/
+│   └── .gitkeep
+├── powershell_tests/
+│   └── .gitkeep
