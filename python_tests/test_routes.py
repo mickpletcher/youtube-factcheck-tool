@@ -24,6 +24,14 @@ class TestFactCheckEndpoint:
         response = client.post("/factcheck", json={"url": "https://vimeo.com/123456"})
         assert response.status_code == 422  # Pydantic validation error
 
+    def test_returns_422_for_oversized_url(self, client):
+        long_query = "a" * 2100
+        response = client.post(
+            "/factcheck",
+            json={"url": f"https://www.youtube.com/watch?v=dQw4w9WgXcQ&x={long_query}"},
+        )
+        assert response.status_code == 422
+
     def test_returns_full_report(self, client, mocker, sample_video_metadata, sample_scored_claims):
         """Full pipeline mock – ensures the route correctly wires all services."""
         mocker.patch(

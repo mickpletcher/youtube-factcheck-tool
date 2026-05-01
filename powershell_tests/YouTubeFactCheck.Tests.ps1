@@ -14,6 +14,23 @@ Describe 'YouTubeFactCheck module' {
             Test-YftYouTubeUrl -Url 'https://vimeo.com/123' | Should -BeFalse
         }
 
+        It 'fails when the url exceeds the request size guard' {
+            $settings = [pscustomobject]@{
+                MaxClaims = 5
+            }
+
+            $longUrl = 'https://www.youtube.com/watch?v=dQw4w9WgXcQ&x=' + ('a' * 2100)
+            { Assert-YftRequestLimits -Url $longUrl -Settings $settings } | Should -Throw '*maximum allowed size*'
+        }
+
+        It 'fails when max claims exceed the hard limit' {
+            $settings = [pscustomobject]@{
+                MaxClaims = 26
+            }
+
+            { Assert-YftRequestLimits -Url 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' -Settings $settings } | Should -Throw '*MAX_CLAIMS cannot exceed 25*'
+        }
+
         It 'fails when required external tools are missing' {
             Mock Get-Command { $null } -ParameterFilter { $Name -in @('yt-dlp', 'ffmpeg') }
             { Assert-YftRequiredTools } | Should -Throw '*yt-dlp*ffmpeg*'
@@ -21,10 +38,14 @@ Describe 'YouTubeFactCheck module' {
 
         It 'creates heuristic claims from factual text' {
             $settings = [pscustomobject]@{
-                OpenAIApiKey       = ''
-                OpenAIModel        = 'gpt-4o-mini'
-                MaxClaims          = 5
-                ResearchMaxResults = 5
+                OpenAIApiKey             = ''
+                OpenAIModel              = 'gpt-4o-mini'
+                OpenAITranscriptionModel = 'whisper-1'
+                MaxClaims                = 5
+                ResearchMaxResults       = 5
+                OpenAITimeoutSeconds     = 60
+                DuckDuckGoTimeoutSeconds = 20
+                YtDlpTimeoutSeconds      = 60
             }
 
             $claims = Get-YftClaims -TranscriptText 'According to scientists, the Moon is 384,400 km from Earth. I like pizza.' -Settings $settings
@@ -75,6 +96,9 @@ Describe 'YouTubeFactCheck module' {
                     OpenAITranscriptionModel = 'whisper-1'
                     MaxClaims                = 5
                     ResearchMaxResults       = 3
+                    OpenAITimeoutSeconds     = 60
+                    DuckDuckGoTimeoutSeconds = 20
+                    YtDlpTimeoutSeconds      = 60
                 }
             }
 

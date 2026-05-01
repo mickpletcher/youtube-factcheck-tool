@@ -6,9 +6,7 @@ This file tracks practical next steps for the project based on the current Pytho
 
 Do these first. They close obvious gaps and reduce setup friction.
 
-1. Add explicit timeout and error handling for OpenAI calls, DuckDuckGo calls, and `yt-dlp` work.
-2. Add a basic request size and claim count guard so a single request cannot trigger excessive work.
-3. Add a repo level contract document that defines the shared request and response shape for Python and PowerShell.
+Tier 1 is currently clear.
 
 ## Tier 2
 

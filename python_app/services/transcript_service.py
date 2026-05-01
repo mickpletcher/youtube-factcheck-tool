@@ -7,6 +7,7 @@ OpenAI Whisper (requires ``ffmpeg`` to be installed on the host system).
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import shutil
@@ -15,6 +16,8 @@ from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 from python_app.models.schemas import TranscriptResult, TranscriptSource, VideoMetadata
+
+logger = logging.getLogger("python_app.transcript_service")
 
 
 def validate_runtime_dependencies() -> None:
@@ -60,7 +63,7 @@ def _extract_video_id(url: str) -> str:
     raise ValueError(f"Could not extract video ID from URL: {url}")
 
 
-def _fetch_metadata_yt_dlp(url: str) -> VideoMetadata:
+def _fetch_metadata_yt_dlp(url: str, yt_dlp_timeout_seconds: int) -> VideoMetadata:
     """Use yt-dlp to fetch video metadata without downloading media."""
     import yt_dlp  # type: ignore
 
@@ -69,6 +72,7 @@ def _fetch_metadata_yt_dlp(url: str) -> VideoMetadata:
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
+        "socket_timeout": yt_dlp_timeout_seconds,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=False)
@@ -91,14 +95,15 @@ def _fetch_metadata_yt_dlp(url: str) -> VideoMetadata:
     )
 
 
-def get_video_metadata(url: str) -> VideoMetadata:
+def get_video_metadata(url: str, yt_dlp_timeout_seconds: int = 60) -> VideoMetadata:
     """Return metadata for the YouTube video at *url*.
 
     Falls back to a minimal stub if yt-dlp is unavailable or the request fails.
     """
     try:
-        return _fetch_metadata_yt_dlp(url)
-    except Exception:
+        return _fetch_metadata_yt_dlp(url, yt_dlp_timeout_seconds)
+    except Exception as exc:
+        logger.warning("yt-dlp metadata request failed: %s", exc)
         video_id = _extract_video_id(url)
         return VideoMetadata(
             video_id=video_id,
@@ -145,7 +150,11 @@ def _fetch_youtube_captions(video_id: str) -> Optional[TranscriptResult]:
         return None
 
 
-def _transcribe_audio(url: str, whisper_model: str = "base") -> Optional[TranscriptResult]:
+def _transcribe_audio(
+    url: str,
+    whisper_model: str = "base",
+    yt_dlp_timeout_seconds: int = 60,
+) -> Optional[TranscriptResult]:
     """Download the audio track and transcribe it using OpenAI Whisper.
 
     Requires ``ffmpeg`` to be installed on the host.  Returns ``None`` if
@@ -164,6 +173,7 @@ def _transcribe_audio(url: str, whisper_model: str = "base") -> Optional[Transcr
             "outtmpl": audio_path,
             "quiet": True,
             "no_warnings": True,
+            "socket_timeout": yt_dlp_timeout_seconds,
             "postprocessors": [
                 {
                     "key": "FFmpegExtractAudio",
@@ -175,7 +185,8 @@ def _transcribe_audio(url: str, whisper_model: str = "base") -> Optional[Transcr
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 ydl.download([url])
-        except Exception:
+        except Exception as exc:
+            logger.warning("yt-dlp audio download failed: %s", exc)
             return None
 
         mp3_path = os.path.join(tmpdir, "audio.mp3")
@@ -196,11 +207,16 @@ def _transcribe_audio(url: str, whisper_model: str = "base") -> Optional[Transcr
                 source=TranscriptSource.audio_transcription,
                 language=language,
             )
-        except Exception:
+        except Exception as exc:
+            logger.warning("Local Whisper transcription failed: %s", exc)
             return None
 
 
-def get_transcript(url: str, whisper_model: str = "base") -> TranscriptResult:
+def get_transcript(
+    url: str,
+    whisper_model: str = "base",
+    yt_dlp_timeout_seconds: int = 60,
+) -> TranscriptResult:
     """Return a transcript for the YouTube video at *url*.
 
     Strategy:
@@ -214,7 +230,11 @@ def get_transcript(url: str, whisper_model: str = "base") -> TranscriptResult:
     if caption_result is not None:
         return caption_result
 
-    audio_result = _transcribe_audio(url, whisper_model=whisper_model)
+    audio_result = _transcribe_audio(
+        url,
+        whisper_model=whisper_model,
+        yt_dlp_timeout_seconds=yt_dlp_timeout_seconds,
+    )
     if audio_result is not None:
         return audio_result
 

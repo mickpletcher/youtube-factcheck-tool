@@ -37,6 +37,9 @@ verdict, confidence, explanation, sources
 Allowed verdict values are Supported, Contradicted, Disputed, and Unverified.
 '@
 
+$script:MaxRequestUrlLength = 2048
+$script:MaxClaimsHardLimit = 25
+
 function Write-YftLog {
     param(
         [Parameter(Mandatory)]
@@ -63,6 +66,60 @@ function Get-YftRepoRoot {
     return $root.Path
 }
 
+function Invoke-YftProcess {
+    param(
+        [Parameter(Mandatory)]
+        [string]$FilePath,
+        [Parameter(Mandatory)]
+        [string[]]$ArgumentList,
+        [Parameter(Mandatory)]
+        [int]$TimeoutSeconds
+    )
+
+    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+    $startInfo.FileName = $FilePath
+    $startInfo.UseShellExecute = $false
+    $startInfo.RedirectStandardOutput = $true
+    $startInfo.RedirectStandardError = $true
+    $startInfo.CreateNoWindow = $true
+
+    foreach ($argument in $ArgumentList) {
+        [void]$startInfo.ArgumentList.Add($argument)
+    }
+
+    $process = New-Object System.Diagnostics.Process
+    $process.StartInfo = $startInfo
+
+    try {
+        [void]$process.Start()
+        if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
+            try {
+                $process.Kill()
+            }
+            catch {
+            }
+            throw "Process timed out after $TimeoutSeconds second(s): $FilePath"
+        }
+
+        $stdout = $process.StandardOutput.ReadToEnd()
+        $stderr = $process.StandardError.ReadToEnd()
+
+        if ($process.ExitCode -ne 0) {
+            $message = if ($stderr) { $stderr.Trim() } else { 'No error output.' }
+            throw "Process failed with exit code $($process.ExitCode): $FilePath. $message"
+        }
+
+        return [pscustomobject]@{
+            StdOut   = $stdout
+            StdErr   = $stderr
+            ExitCode = $process.ExitCode
+        }
+    }
+    finally {
+        $process.Dispose()
+    }
+}
+
 function Assert-YftRequiredTools {
     $missingTools = New-Object System.Collections.Generic.List[string]
     foreach ($toolName in @('yt-dlp', 'ffmpeg')) {
@@ -78,6 +135,27 @@ function Assert-YftRequiredTools {
     }
 }
 
+function Assert-YftRequestLimits {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Url,
+        [Parameter(Mandatory)]
+        [pscustomobject]$Settings
+    )
+
+    if ($Url.Length -gt $script:MaxRequestUrlLength) {
+        throw "URL length exceeds the maximum allowed size of $($script:MaxRequestUrlLength) characters."
+    }
+
+    if ($Settings.MaxClaims -lt 1) {
+        throw 'MAX_CLAIMS must be at least 1.'
+    }
+
+    if ($Settings.MaxClaims -gt $script:MaxClaimsHardLimit) {
+        throw "MAX_CLAIMS cannot exceed $($script:MaxClaimsHardLimit)."
+    }
+}
+
 function Get-YftSettings {
     $repoRoot = Get-YftRepoRoot
     $envPath = Join-Path $repoRoot '.env'
@@ -87,6 +165,9 @@ function Get-YftSettings {
         OpenAITranscriptionModel = 'whisper-1'
         MaxClaims                = 10
         ResearchMaxResults       = 5
+        OpenAITimeoutSeconds     = 60
+        DuckDuckGoTimeoutSeconds = 20
+        YtDlpTimeoutSeconds      = 60
     }
 
     if (Test-Path -LiteralPath $envPath) {
@@ -109,13 +190,31 @@ function Get-YftSettings {
                 'MAX_CLAIMS' {
                     $parsed = 0
                     if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) {
-                        $settings.MaxClaims = $parsed
+                        $settings.MaxClaims = [Math]::Min($parsed, $script:MaxClaimsHardLimit)
                     }
                 }
                 'RESEARCH_MAX_RESULTS' {
                     $parsed = 0
                     if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) {
                         $settings.ResearchMaxResults = $parsed
+                    }
+                }
+                'OPENAI_TIMEOUT_SECONDS' {
+                    $parsed = 0
+                    if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) {
+                        $settings.OpenAITimeoutSeconds = $parsed
+                    }
+                }
+                'DUCKDUCKGO_TIMEOUT_SECONDS' {
+                    $parsed = 0
+                    if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) {
+                        $settings.DuckDuckGoTimeoutSeconds = $parsed
+                    }
+                }
+                'YT_DLP_TIMEOUT_SECONDS' {
+                    $parsed = 0
+                    if ([int]::TryParse($value, [ref]$parsed) -and $parsed -gt 0) {
+                        $settings.YtDlpTimeoutSeconds = $parsed
                     }
                 }
             }
@@ -171,13 +270,23 @@ function Get-YftVideoId {
 function Get-YftVideoMetadata {
     param(
         [Parameter(Mandatory)]
-        [string]$Url
+        [string]$Url,
+        [int]$TimeoutSeconds = 60
     )
 
     $videoId = Get-YftVideoId -Url $Url
 
     try {
-        $json = & yt-dlp --dump-single-json --skip-download --no-warnings --quiet $Url 2>$null
+        $processResult = Invoke-YftProcess -FilePath 'yt-dlp' -ArgumentList @(
+            '--dump-single-json',
+            '--skip-download',
+            '--no-warnings',
+            '--quiet',
+            '--socket-timeout',
+            [string]$TimeoutSeconds,
+            $Url
+        ) -TimeoutSeconds $TimeoutSeconds
+        $json = $processResult.StdOut
         if (-not $json) {
             throw 'yt-dlp returned no metadata.'
         }
@@ -198,6 +307,9 @@ function Get-YftVideoMetadata {
         }
     }
     catch {
+        Write-YftLog -Stage 'metadata' -Status 'fallback' -Fields @{
+            reason = $_.Exception.Message
+        }
         return [pscustomobject]@{
             video_id         = $videoId
             title            = 'Unknown Title'
@@ -241,7 +353,8 @@ function ConvertFrom-YftSubtitleText {
 function Get-YftYouTubeCaptions {
     param(
         [Parameter(Mandatory)]
-        [string]$Url
+        [string]$Url,
+        [int]$TimeoutSeconds = 60
     )
 
     $tempDir = Join-Path ([System.IO.Path]::GetTempPath()) ("yft_subs_" + [guid]::NewGuid().ToString('N'))
@@ -249,16 +362,22 @@ function Get-YftYouTubeCaptions {
 
     try {
         $outputTemplate = Join-Path $tempDir 'subtitle'
-        & yt-dlp `
-            --skip-download `
-            --write-subs `
-            --write-auto-subs `
-            --sub-langs 'en,en-US,en-GB' `
-            --convert-subs vtt `
-            --output $outputTemplate `
-            --no-warnings `
-            --quiet `
-            $Url 2>$null | Out-Null
+        [void](Invoke-YftProcess -FilePath 'yt-dlp' -ArgumentList @(
+            '--skip-download',
+            '--write-subs',
+            '--write-auto-subs',
+            '--sub-langs',
+            'en,en-US,en-GB',
+            '--convert-subs',
+            'vtt',
+            '--output',
+            $outputTemplate,
+            '--no-warnings',
+            '--quiet',
+            '--socket-timeout',
+            [string]$TimeoutSeconds,
+            $Url
+        ) -TimeoutSeconds $TimeoutSeconds)
 
         $subtitleFile = Get-ChildItem -LiteralPath $tempDir -File | Where-Object {
             $_.Extension -in @('.vtt', '.srv1', '.srv2', '.srv3', '.ttml')
@@ -280,6 +399,13 @@ function Get-YftYouTubeCaptions {
             language = 'en'
         }
     }
+    catch {
+        Write-YftLog -Stage 'transcript_fetch' -Status 'fallback' -Fields @{
+            source = 'youtube_captions'
+            reason = $_.Exception.Message
+        }
+        return $null
+    }
     finally {
         if (Test-Path -LiteralPath $tempDir) {
             Remove-Item -LiteralPath $tempDir -Recurse -Force
@@ -294,12 +420,14 @@ function Invoke-YftAudioTranscription {
         [Parameter(Mandatory)]
         [string]$ApiKey,
         [Parameter(Mandatory)]
-        [string]$Model
+        [string]$Model,
+        [int]$TimeoutSeconds = 60
     )
 
     $handler = New-Object System.Net.Http.HttpClientHandler
     $client = New-Object System.Net.Http.HttpClient($handler)
     try {
+        $client.Timeout = [TimeSpan]::FromSeconds($TimeoutSeconds)
         $client.DefaultRequestHeaders.Authorization = New-Object System.Net.Http.Headers.AuthenticationHeaderValue('Bearer', $ApiKey)
         $content = New-Object System.Net.Http.MultipartFormDataContent
         $content.Add((New-Object System.Net.Http.StringContent($Model)), 'model')
@@ -344,14 +472,20 @@ function Get-YftAudioTranscript {
 
     try {
         $outputTemplate = Join-Path $tempDir 'audio.%(ext)s'
-        & yt-dlp `
-            --extract-audio `
-            --audio-format mp3 `
-            --audio-quality 5 `
-            --output $outputTemplate `
-            --no-warnings `
-            --quiet `
-            $Url 2>$null | Out-Null
+        [void](Invoke-YftProcess -FilePath 'yt-dlp' -ArgumentList @(
+            '--extract-audio',
+            '--audio-format',
+            'mp3',
+            '--audio-quality',
+            '5',
+            '--output',
+            $outputTemplate,
+            '--no-warnings',
+            '--quiet',
+            '--socket-timeout',
+            [string]$Settings.YtDlpTimeoutSeconds,
+            $Url
+        ) -TimeoutSeconds $Settings.YtDlpTimeoutSeconds)
 
         $audioFile = Get-ChildItem -LiteralPath $tempDir -File | Where-Object {
             $_.Extension -eq '.mp3'
@@ -361,9 +495,13 @@ function Get-YftAudioTranscript {
             return $null
         }
 
-        return Invoke-YftAudioTranscription -AudioPath $audioFile.FullName -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAITranscriptionModel
+        return Invoke-YftAudioTranscription -AudioPath $audioFile.FullName -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAITranscriptionModel -TimeoutSeconds $Settings.OpenAITimeoutSeconds
     }
     catch {
+        Write-YftLog -Stage 'transcript_fetch' -Status 'fallback' -Fields @{
+            source = 'audio_transcription'
+            reason = $_.Exception.Message
+        }
         return $null
     }
     finally {
@@ -381,7 +519,7 @@ function Get-YftTranscript {
         [pscustomobject]$Settings
     )
 
-    $captionResult = Get-YftYouTubeCaptions -Url $Url
+    $captionResult = Get-YftYouTubeCaptions -Url $Url -TimeoutSeconds $Settings.YtDlpTimeoutSeconds
     if ($captionResult) {
         Write-YftLog -Stage 'transcript_fetch' -Status 'complete' -Fields @{
             transcript_source = $captionResult.source
@@ -453,7 +591,8 @@ function Invoke-YftChatCompletion {
         [Parameter(Mandatory)]
         [object[]]$Messages,
         [double]$Temperature = 0.2,
-        [int]$MaxTokens = 1024
+        [int]$MaxTokens = 1024,
+        [int]$TimeoutSeconds = 60
     )
 
     $headers = @{
@@ -468,7 +607,7 @@ function Invoke-YftChatCompletion {
         max_tokens  = $MaxTokens
     } | ConvertTo-Json -Depth 10
 
-    $response = Invoke-RestMethod -Method Post -Uri 'https://api.openai.com/v1/chat/completions' -Headers $headers -Body $body
+    $response = Invoke-RestMethod -Method Post -Uri 'https://api.openai.com/v1/chat/completions' -Headers $headers -Body $body -TimeoutSec $TimeoutSeconds
     return [string]$response.choices[0].message.content
 }
 
@@ -534,7 +673,7 @@ function Get-YftClaims {
                 @{ role = 'system'; content = $script:ClaimPrompt }
                 @{ role = 'user'; content = "Extract up to $($Settings.MaxClaims) key factual claims from this transcript:`n`n$truncated" }
             )
-            $raw = Invoke-YftChatCompletion -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAIModel -Messages $messages -Temperature 0.2 -MaxTokens 1024
+            $raw = Invoke-YftChatCompletion -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAIModel -Messages $messages -Temperature 0.2 -MaxTokens 1024 -TimeoutSeconds $Settings.OpenAITimeoutSeconds
             $claimTexts = ConvertFrom-YftJsonFragment -Text $raw -Kind 'array'
             if ($claimTexts) {
                 $claims = New-Object System.Collections.Generic.List[object]
@@ -561,6 +700,10 @@ function Get-YftClaims {
             }
         }
         catch {
+            Write-YftLog -Stage 'claim_extraction' -Status 'fallback' -Fields @{
+                provider = 'openai'
+                reason   = $_.Exception.Message
+            }
         }
     }
 
@@ -593,16 +736,21 @@ function Get-YftSearchResults {
         [Parameter(Mandatory)]
         [string]$Query,
         [Parameter(Mandatory)]
-        [int]$MaxResults
+        [int]$MaxResults,
+        [int]$TimeoutSeconds = 20
     )
 
     $encoded = [System.Uri]::EscapeDataString($Query)
     $uri = "https://html.duckduckgo.com/html/?q=$encoded"
 
     try {
-        $response = Invoke-WebRequest -Uri $uri -Headers @{ 'User-Agent' = 'Mozilla/5.0' } -UseBasicParsing
+        $response = Invoke-WebRequest -Uri $uri -Headers @{ 'User-Agent' = 'Mozilla/5.0' } -UseBasicParsing -TimeoutSec $TimeoutSeconds
     }
     catch {
+        Write-YftLog -Stage 'research' -Status 'fallback' -Fields @{
+            reason = $_.Exception.Message
+            query  = $Query
+        }
         return @()
     }
 
@@ -639,7 +787,12 @@ function Get-YftResearchResults {
     $results = New-Object System.Collections.Generic.List[object]
     foreach ($claim in $Claims) {
         $query = "fact check: `"$($claim.text)`""
-        $searchResults = @(Get-YftSearchResults -Query $query -MaxResults $Settings.ResearchMaxResults)
+        $searchResults = @(
+            Get-YftSearchResults `
+                -Query $query `
+                -MaxResults $Settings.ResearchMaxResults `
+                -TimeoutSeconds $Settings.DuckDuckGoTimeoutSeconds
+        )
         $results.Add([pscustomobject]@{
             claim_id       = $claim.id
             claim_text     = $claim.text
@@ -734,7 +887,7 @@ function Get-YftScoredClaims {
                     @{ role = 'user'; content = "Claim: $($result.claim_text)`n`nSearch Results:`n$formattedResults" }
                 )
 
-                $raw = Invoke-YftChatCompletion -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAIModel -Messages $messages -Temperature 0.1 -MaxTokens 512
+                $raw = Invoke-YftChatCompletion -ApiKey $Settings.OpenAIApiKey -Model $Settings.OpenAIModel -Messages $messages -Temperature 0.1 -MaxTokens 512 -TimeoutSeconds $Settings.OpenAITimeoutSeconds
                 $data = ConvertFrom-YftJsonFragment -Text $raw -Kind 'object'
                 if ($data) {
                     $confidence = 0.5
@@ -761,6 +914,11 @@ function Get-YftScoredClaims {
                 }
             }
             catch {
+                Write-YftLog -Stage 'verdict_scoring' -Status 'fallback' -Fields @{
+                    provider = 'openai'
+                    claim_id = $result.claim_id
+                    reason   = $_.Exception.Message
+                }
             }
         }
 
@@ -950,7 +1108,8 @@ function Invoke-YftFactCheck {
 
     Assert-YftRequiredTools
     $settings = Get-YftSettings
-    $video = Get-YftVideoMetadata -Url $Url
+    Assert-YftRequestLimits -Url $Url -Settings $settings
+    $video = Get-YftVideoMetadata -Url $Url -TimeoutSeconds $settings.YtDlpTimeoutSeconds
     Write-YftLog -Stage 'metadata' -Status 'complete' -Fields @{
         video_id = $video.video_id
         title    = $video.title
@@ -970,6 +1129,7 @@ function Invoke-YftFactCheck {
 
 Export-ModuleMember -Function @(
     'Assert-YftRequiredTools',
+    'Assert-YftRequestLimits',
     'Get-YftSettings',
     'Test-YftYouTubeUrl',
     'Get-YftVideoId',

@@ -43,7 +43,10 @@ async def factcheck(request: FactCheckRequest) -> FactCheckReport:
 
     # 1. Metadata
     try:
-        video = transcript_service.get_video_metadata(url)
+        video = transcript_service.get_video_metadata(
+            url,
+            yt_dlp_timeout_seconds=settings.yt_dlp_timeout_seconds,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
@@ -61,7 +64,11 @@ async def factcheck(request: FactCheckRequest) -> FactCheckReport:
 
     # 2. Transcript
     transcript_started = time.perf_counter()
-    transcript = transcript_service.get_transcript(url, whisper_model=settings.whisper_model)
+    transcript = transcript_service.get_transcript(
+        url,
+        whisper_model=settings.whisper_model,
+        yt_dlp_timeout_seconds=settings.yt_dlp_timeout_seconds,
+    )
     _log_event(
         "transcript_fetch",
         "complete",
@@ -78,6 +85,7 @@ async def factcheck(request: FactCheckRequest) -> FactCheckReport:
         max_claims=settings.max_claims,
         openai_api_key=settings.openai_api_key,
         openai_model=settings.openai_model,
+        openai_timeout_seconds=settings.openai_timeout_seconds,
     )
     _log_event(
         "claim_extraction",
@@ -92,6 +100,7 @@ async def factcheck(request: FactCheckRequest) -> FactCheckReport:
     research_results = research_service.research_claims(
         claims=claims,
         max_results=settings.research_max_results,
+        duckduckgo_timeout_seconds=settings.duckduckgo_timeout_seconds,
     )
     research_result_count = sum(len(result.search_results) for result in research_results)
     _log_event(
@@ -109,6 +118,7 @@ async def factcheck(request: FactCheckRequest) -> FactCheckReport:
         research_results=research_results,
         openai_api_key=settings.openai_api_key,
         openai_model=settings.openai_model,
+        openai_timeout_seconds=settings.openai_timeout_seconds,
     )
     _log_event(
         "verdict_scoring",

@@ -8,10 +8,13 @@ is available; otherwise falls back to a keyword-based heuristic.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import List
 
 from python_app.models.schemas import ResearchResult, ScoredClaim, VerdictLabel
+
+logger = logging.getLogger("python_app.verdict_service")
 
 # ---------------------------------------------------------------------------
 # LLM-based scoring
@@ -45,11 +48,12 @@ def _score_claim_llm(
     research: ResearchResult,
     api_key: str,
     model: str,
+    openai_timeout_seconds: int,
 ) -> ScoredClaim:
     """Use the OpenAI chat completions API to score a claim."""
     from openai import OpenAI  # type: ignore
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=openai_timeout_seconds)
 
     # Format search results as a readable block
     results_text = "\n".join(
@@ -180,6 +184,7 @@ def score_claim(
     research: ResearchResult,
     openai_api_key: str = "",
     openai_model: str = "gpt-4o-mini",
+    openai_timeout_seconds: int = 60,
 ) -> ScoredClaim:
     """Return a :class:`~app.models.schemas.ScoredClaim` for *research*.
 
@@ -188,9 +193,14 @@ def score_claim(
     """
     if openai_api_key:
         try:
-            return _score_claim_llm(research, openai_api_key, openai_model)
-        except Exception:
-            pass  # fall through to heuristic
+            return _score_claim_llm(
+                research,
+                openai_api_key,
+                openai_model,
+                openai_timeout_seconds,
+            )
+        except Exception as exc:
+            logger.warning("Verdict scoring OpenAI request failed: %s", exc)
 
     return _score_claim_heuristic(research)
 
@@ -199,6 +209,7 @@ def score_claims(
     research_results: List[ResearchResult],
     openai_api_key: str = "",
     openai_model: str = "gpt-4o-mini",
+    openai_timeout_seconds: int = 60,
 ) -> List[ScoredClaim]:
     """Score all claims in *research_results*.
 
@@ -211,6 +222,11 @@ def score_claims(
         List of :class:`~app.models.schemas.ScoredClaim` objects.
     """
     return [
-        score_claim(r, openai_api_key=openai_api_key, openai_model=openai_model)
+        score_claim(
+            r,
+            openai_api_key=openai_api_key,
+            openai_model=openai_model,
+            openai_timeout_seconds=openai_timeout_seconds,
+        )
         for r in research_results
     ]

@@ -8,10 +8,13 @@ API key is configured.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import List
 
 from python_app.models.schemas import Claim
+
+logger = logging.getLogger("python_app.claim_extractor")
 
 
 # ---------------------------------------------------------------------------
@@ -30,11 +33,17 @@ Return ONLY a JSON array of claim strings. Example:
 """
 
 
-def _extract_claims_llm(text: str, max_claims: int, api_key: str, model: str) -> List[Claim]:
+def _extract_claims_llm(
+    text: str,
+    max_claims: int,
+    api_key: str,
+    model: str,
+    openai_timeout_seconds: int,
+) -> List[Claim]:
     """Use the OpenAI chat completions API to extract claims from *text*."""
     from openai import OpenAI  # type: ignore
 
-    client = OpenAI(api_key=api_key)
+    client = OpenAI(api_key=api_key, timeout=openai_timeout_seconds)
 
     # Truncate to stay well within model context limits
     truncated = text[:12000]
@@ -116,6 +125,7 @@ def extract_claims(
     max_claims: int = 10,
     openai_api_key: str = "",
     openai_model: str = "gpt-4o-mini",
+    openai_timeout_seconds: int = 60,
 ) -> List[Claim]:
     """Extract factual claims from *transcript_text*.
 
@@ -137,9 +147,13 @@ def extract_claims(
     if openai_api_key:
         try:
             return _extract_claims_llm(
-                transcript_text, max_claims, openai_api_key, openai_model
+                transcript_text,
+                max_claims,
+                openai_api_key,
+                openai_model,
+                openai_timeout_seconds,
             )
-        except Exception:
-            pass  # fall through to heuristic
+        except Exception as exc:
+            logger.warning("Claim extraction OpenAI request failed: %s", exc)
 
     return _extract_claims_heuristic(transcript_text, max_claims)

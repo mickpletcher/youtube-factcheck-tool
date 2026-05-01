@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import List, Optional
 
-from pydantic import BaseModel, HttpUrl, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 # ---------------------------------------------------------------------------
@@ -14,7 +14,7 @@ from pydantic import BaseModel, HttpUrl, field_validator
 
 
 class FactCheckRequest(BaseModel):
-    url: str
+    url: str = Field(max_length=2048)
 
     @field_validator("url")
     @classmethod

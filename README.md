@@ -11,9 +11,10 @@ The repo contains two implementations:
 
 1. [CHANGELOG.md](CHANGELOG.md)
 2. [PROJECT_SCAN.md](PROJECT_SCAN.md)
-3. [future-upgrades.md](future-upgrades.md)
-4. [docs/repo-audit.md](docs/repo-audit.md)
-5. [specs/001-dual-stack-factcheck-foundation/spec.md](specs/001-dual-stack-factcheck-foundation/spec.md)
+3. [CONTRACT.md](CONTRACT.md)
+4. [future-upgrades.md](future-upgrades.md)
+5. [docs/repo-audit.md](docs/repo-audit.md)
+6. [specs/001-dual-stack-factcheck-foundation/spec.md](specs/001-dual-stack-factcheck-foundation/spec.md)
 
 ## Repo Layout
 
@@ -28,6 +29,7 @@ requirements.txt
 README.md
 CHANGELOG.md
 PROJECT_SCAN.md
+CONTRACT.md
 future-upgrades.md
 docs/
 specs/
@@ -106,8 +108,11 @@ Current example file:
 ```env
 OPENAI_API_KEY=
 OPENAI_MODEL=gpt-4o-mini
+OPENAI_TIMEOUT_SECONDS=60
 WHISPER_MODEL=base
 OPENAI_TRANSCRIPTION_MODEL=whisper-1
+YT_DLP_TIMEOUT_SECONDS=60
+DUCKDUCKGO_TIMEOUT_SECONDS=20
 MAX_CLAIMS=10
 RESEARCH_MAX_RESULTS=5
 ```
@@ -122,10 +127,21 @@ Settings are used like this:
    Used by the Python implementation for local Whisper fallback
 4. `OPENAI_TRANSCRIPTION_MODEL`
    Used by the PowerShell implementation for OpenAI audio transcription fallback
-5. `MAX_CLAIMS`
-   Shared extraction limit
-6. `RESEARCH_MAX_RESULTS`
+5. `OPENAI_TIMEOUT_SECONDS`
+   Used by both implementations for OpenAI request timeouts
+6. `YT_DLP_TIMEOUT_SECONDS`
+   Used by both implementations for `yt-dlp` request and process timeouts
+7. `DUCKDUCKGO_TIMEOUT_SECONDS`
+   Used by both implementations for DuckDuckGo request timeouts
+8. `MAX_CLAIMS`
+   Shared extraction limit with a hard cap of `25`
+9. `RESEARCH_MAX_RESULTS`
    Shared research limit
+
+Request guardrails:
+
+1. URL length is limited to `2048` characters
+2. Effective `MAX_CLAIMS` is limited to `25`
 
 ## Tutorial 1: Run The Native PowerShell Pipeline
 
@@ -167,6 +183,8 @@ The script now writes structured progress logs for:
 6. Report generation
 
 The final object is still written to standard output as JSON.
+
+The native PowerShell path now applies explicit timeouts to `yt-dlp`, DuckDuckGo, and OpenAI calls and falls back cleanly when those provider calls fail.
 
 ### Step 5: Save Output Files
 
@@ -247,6 +265,8 @@ Invoke-RestMethod `
 
 The API now writes structured logs for transcript fetch, claim extraction, research, verdict scoring, and report generation.
 
+The API now applies explicit timeouts to `yt-dlp`, DuckDuckGo, and OpenAI calls and falls back cleanly when those provider calls fail.
+
 ### Step 6: Save The API Response To Files
 
 ```powershell
@@ -307,6 +327,8 @@ with open("factcheck-report.md", "w", encoding="utf-8") as handle:
 ```
 
 ## Response Shape
+
+The shared contract for both implementations is defined in [CONTRACT.md](CONTRACT.md).
 
 ```json
 {

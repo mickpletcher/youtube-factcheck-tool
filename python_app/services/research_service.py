@@ -7,9 +7,12 @@ search back-end (no API key required).
 
 from __future__ import annotations
 
+import logging
 from typing import List
 
 from python_app.models.schemas import Claim, ResearchResult, SearchResult
+
+logger = logging.getLogger("python_app.research_service")
 
 # Trusted source domains – results from these domains are prioritised
 TRUSTED_DOMAINS = frozenset(
@@ -46,7 +49,11 @@ def _is_trusted(url: str) -> bool:
     return any(domain in url_lower for domain in TRUSTED_DOMAINS)
 
 
-def _search_duckduckgo(query: str, max_results: int) -> List[SearchResult]:
+def _search_duckduckgo(
+    query: str,
+    max_results: int,
+    duckduckgo_timeout_seconds: int,
+) -> List[SearchResult]:
     """Search DuckDuckGo and return up to *max_results* results."""
     try:
         from duckduckgo_search import DDGS  # type: ignore
@@ -55,13 +62,14 @@ def _search_duckduckgo(query: str, max_results: int) -> List[SearchResult]:
 
     results: List[SearchResult] = []
     try:
-        with DDGS() as ddgs:
+        with DDGS(timeout=duckduckgo_timeout_seconds) as ddgs:
             for r in ddgs.text(query, max_results=max_results * 2):
                 title = r.get("title", "")
                 href = r.get("href", "")
                 body = r.get("body", "")
                 results.append(SearchResult(title=title, url=href, snippet=body))
-    except Exception:
+    except Exception as exc:
+        logger.warning("DuckDuckGo research request failed: %s", exc)
         return []
 
     # Put trusted sources first
@@ -70,7 +78,11 @@ def _search_duckduckgo(query: str, max_results: int) -> List[SearchResult]:
     return (trusted + others)[:max_results]
 
 
-def research_claim(claim: Claim, max_results: int = 5) -> ResearchResult:
+def research_claim(
+    claim: Claim,
+    max_results: int = 5,
+    duckduckgo_timeout_seconds: int = 20,
+) -> ResearchResult:
     """Search the web for evidence related to *claim*.
 
     Args:
@@ -82,7 +94,7 @@ def research_claim(claim: Claim, max_results: int = 5) -> ResearchResult:
         results for the claim.
     """
     query = f'fact check: "{claim.text}"'
-    search_results = _search_duckduckgo(query, max_results)
+    search_results = _search_duckduckgo(query, max_results, duckduckgo_timeout_seconds)
     return ResearchResult(
         claim_id=claim.id,
         claim_text=claim.text,
@@ -90,7 +102,11 @@ def research_claim(claim: Claim, max_results: int = 5) -> ResearchResult:
     )
 
 
-def research_claims(claims: List[Claim], max_results: int = 5) -> List[ResearchResult]:
+def research_claims(
+    claims: List[Claim],
+    max_results: int = 5,
+    duckduckgo_timeout_seconds: int = 20,
+) -> List[ResearchResult]:
     """Research each claim in *claims* and return results in the same order.
 
     Args:
@@ -100,4 +116,11 @@ def research_claims(claims: List[Claim], max_results: int = 5) -> List[ResearchR
     Returns:
         List of :class:`~app.models.schemas.ResearchResult` objects.
     """
-    return [research_claim(claim, max_results=max_results) for claim in claims]
+    return [
+        research_claim(
+            claim,
+            max_results=max_results,
+            duckduckgo_timeout_seconds=duckduckgo_timeout_seconds,
+        )
+        for claim in claims
+    ]
